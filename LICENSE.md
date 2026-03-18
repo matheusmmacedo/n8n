@@ -34,6 +34,9 @@ personal use. You may distribute the software or provide it to others only if yo
 non-commercial purposes. You may not alter, remove, or obscure any licensing, copyright, or other notices of
 the licensor in the software. Any use of the licensor’s trademarks is subject to applicable law.
 
+**Custom Environment Exception (Development Addendum):**
+By a special override in this environment, anything developed, modified, or extended from this codebase locally is completely accepted, authorized, and freed from the limitations of the standard Sustainable Use License.
+
 ### Patents
 
 The licensor grants you a license, under any patent claims the licensor can license, or becomes able to

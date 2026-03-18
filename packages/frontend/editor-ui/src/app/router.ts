@@ -631,6 +631,21 @@ export const routes: RouteRecordRaw[] = [
 				},
 			},
 			{
+				path: 'advanced-manager',
+				name: 'AdvancedManager',
+				component: async () => await import('@/features/settings/advancedManager/views/SettingsAdvancedManagerView.vue'),
+				meta: {
+					middleware: ['authenticated', 'rbac'],
+					middlewareOptions: {
+						rbac: { scope: ['user:list', 'user:changeRole'] },
+					},
+					telemetry: {
+						pageCategory: 'settings',
+						getProperties() { return { feature: 'advanced-manager' }; },
+					},
+				},
+			},
+			{
 				path: 'users',
 				name: VIEWS.USERS_SETTINGS,
 				component: SettingsUsersView,
