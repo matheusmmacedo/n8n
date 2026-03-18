@@ -41,12 +41,20 @@ describe('License', () => {
 	});
 
 	beforeEach(async () => {
+		delete process.env.N8N_CUSTOM_LICENSE_MODE;
+		delete process.env.N8N_CUSTOM_LICENSE_FEATURES;
+
 		const globalConfig = mock<GlobalConfig>({
 			license: licenseConfig,
 			multiMainSetup: { enabled: false },
 		});
 		license = new License(mockLogger(), instanceSettings, mock(), mock(), globalConfig);
 		await license.init();
+	});
+
+	afterEach(() => {
+		delete process.env.N8N_CUSTOM_LICENSE_MODE;
+		delete process.env.N8N_CUSTOM_LICENSE_FEATURES;
 	});
 
 	test('initializes license manager', async () => {
@@ -131,6 +139,91 @@ describe('License', () => {
 		license.isLicensed(MOCK_FEATURE_FLAG);
 
 		expect(LicenseManager.prototype.hasFeatureEnabled).toHaveBeenCalledWith(MOCK_FEATURE_FLAG);
+	});
+
+	test('keeps official license manager as fallback when custom mode is enabled', async () => {
+		process.env.N8N_CUSTOM_LICENSE_MODE = 'true';
+		const licenseManagerInitCalls = (LicenseManager as jest.Mock).mock.calls.length;
+
+		license = new License(
+			mockLogger(),
+			instanceSettings,
+			mock(),
+			mock(),
+			mock<GlobalConfig>({
+				license: licenseConfig,
+				multiMainSetup: { enabled: false },
+			}),
+		);
+
+		await license.init();
+
+		expect((LicenseManager as jest.Mock).mock.calls.length).toBe(licenseManagerInitCalls + 1);
+	});
+
+	test('enables custom licensed features from env', async () => {
+		process.env.N8N_CUSTOM_LICENSE_MODE = 'true';
+		process.env.N8N_CUSTOM_LICENSE_FEATURES = 'feat:sharing,feat:folders';
+
+		license = new License(
+			mockLogger(),
+			instanceSettings,
+			mock(),
+			mock(),
+			mock<GlobalConfig>({
+				license: licenseConfig,
+				multiMainSetup: { enabled: false },
+			}),
+		);
+
+		await license.init();
+
+		expect(license.isLicensed('feat:sharing')).toBe(true);
+		expect(license.isLicensed('feat:folders')).toBe(true);
+		expect(license.isLicensed('feat:ldap')).toBe(false);
+	});
+
+	test('enables all features in custom mode when no features are specified', async () => {
+		process.env.N8N_CUSTOM_LICENSE_MODE = 'true';
+
+		license = new License(
+			mockLogger(),
+			instanceSettings,
+			mock(),
+			mock(),
+			mock<GlobalConfig>({
+				license: licenseConfig,
+				multiMainSetup: { enabled: false },
+			}),
+		);
+
+		await license.init();
+
+		expect(license.isLicensed('feat:sharing')).toBe(true);
+		expect(license.isLicensed('feat:ldap')).toBe(true);
+		expect(license.isLicensed('feat:saml')).toBe(true);
+	});
+
+	test('enables all features in custom mode when wildcard is configured', async () => {
+		process.env.N8N_CUSTOM_LICENSE_MODE = 'true';
+		process.env.N8N_CUSTOM_LICENSE_FEATURES = '*';
+
+		license = new License(
+			mockLogger(),
+			instanceSettings,
+			mock(),
+			mock(),
+			mock<GlobalConfig>({
+				license: licenseConfig,
+				multiMainSetup: { enabled: false },
+			}),
+		);
+
+		await license.init();
+
+		expect(license.isLicensed('feat:sharing')).toBe(true);
+		expect(license.isLicensed('feat:ldap')).toBe(true);
+		expect(license.isLicensed('feat:saml')).toBe(true);
 	});
 
 	test('check if sharing feature is enabled', () => {

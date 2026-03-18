@@ -32,9 +32,46 @@ export type FeatureReturnType = Partial<
 
 type LicenseRefreshCallback = (cert: string) => void;
 
+const CUSTOM_LICENSE_MODE_ENV = 'N8N_CUSTOM_LICENSE_MODE';
+const CUSTOM_LICENSE_FEATURES_ENV = 'N8N_CUSTOM_LICENSE_FEATURES';
+
+function parseCustomLicensedFeatures(rawFeatures: string, logger: Logger) {
+	const availableFeatures = new Set<string>(Object.values(LICENSE_FEATURES));
+	const customFeatures = new Set<string>();
+	let enableAllFeatures = false;
+
+	for (const feature of rawFeatures.split(',')) {
+		const normalizedFeature = feature.trim();
+		if (normalizedFeature === '') continue;
+
+		if (normalizedFeature === '*') {
+			enableAllFeatures = true;
+			continue;
+		}
+
+		if (availableFeatures.has(normalizedFeature)) {
+			customFeatures.add(normalizedFeature);
+			continue;
+		}
+
+		logger.warn('Ignoring unknown custom licensed feature', {
+			feature: normalizedFeature,
+			env: CUSTOM_LICENSE_FEATURES_ENV,
+		});
+	}
+
+	return { customFeatures, enableAllFeatures };
+}
+
 @Service()
 export class License implements LicenseProvider {
 	private manager: LicenseManager | undefined;
+
+	private readonly isCustomLicenseModeEnabled: boolean;
+
+	private readonly customLicensedFeatures: Set<string>;
+
+	private readonly isCustomLicenseEnableAllFeatures: boolean;
 
 	private isShuttingDown = false;
 
@@ -48,12 +85,32 @@ export class License implements LicenseProvider {
 		private readonly globalConfig: GlobalConfig,
 	) {
 		this.logger = this.logger.scoped('license');
+		this.isCustomLicenseModeEnabled =
+			process.env[CUSTOM_LICENSE_MODE_ENV]?.toLowerCase() === 'true';
+		const parsedCustomLicenseFeatures = parseCustomLicensedFeatures(
+			process.env[CUSTOM_LICENSE_FEATURES_ENV] ?? '',
+			this.logger,
+		);
+		this.customLicensedFeatures = parsedCustomLicenseFeatures.customFeatures;
+		this.isCustomLicenseEnableAllFeatures =
+			parsedCustomLicenseFeatures.enableAllFeatures ||
+			(this.isCustomLicenseModeEnabled && this.customLicensedFeatures.size === 0);
 	}
 
 	async init({
 		forceRecreate = false,
 		isCli = false,
 	}: { forceRecreate?: boolean; isCli?: boolean } = {}) {
+		if (this.isCustomLicenseModeEnabled) {
+			if (this.isCustomLicenseEnableAllFeatures) {
+				this.logger.info('Using custom license mode with all features enabled');
+			} else if (this.customLicensedFeatures.size > 0) {
+				this.logger.info('Using custom license mode with pre-enabled features', {
+					count: this.customLicensedFeatures.size,
+				});
+			}
+		}
+
 		if (this.manager && !forceRecreate) {
 			this.logger.warn('License manager already initialized or shutting down');
 			return;
@@ -252,6 +309,12 @@ export class License implements LicenseProvider {
 	}
 
 	isLicensed(feature: BooleanLicenseFeature) {
+		if (this.isCustomLicenseModeEnabled) {
+			if (this.isCustomLicenseEnableAllFeatures || this.customLicensedFeatures.has(feature)) {
+				return true;
+			}
+		}
+
 		return this.manager?.hasFeatureEnabled(feature) ?? false;
 	}
 
