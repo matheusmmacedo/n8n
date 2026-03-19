@@ -7,8 +7,8 @@ RUN apk add --no-cache python3 make g++ git
 
 WORKDIR /app
 
-# Init a git repo so lefthook doesn't fail
-RUN git init
+# Init a git repo so lefthook doesn't fail during prepare
+RUN git init && git config user.email "build@n8n" && git config user.name "build"
 
 # Enable corepack for pnpm
 RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
@@ -16,8 +16,8 @@ RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
 # Copy everything needed for the build
 COPY . .
 
-# Install dependencies (ignore-scripts to skip lefthook)
-RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild
+# Install dependencies (with scripts so postinstall generates parsers etc.)
+RUN pnpm install --frozen-lockfile
 
 # Build all runtime packages, skip test tooling
 RUN pnpm turbo run build --filter='!@n8n/playwright-janitor' --filter='!n8n-playwright'
