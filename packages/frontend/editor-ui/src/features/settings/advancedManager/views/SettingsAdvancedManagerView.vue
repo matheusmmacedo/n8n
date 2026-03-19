@@ -1,22 +1,52 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useToast } from '@/composables/useToast';
-import { useI18n } from '@/composables/useI18n';
-import { useRestApi } from '@/composables/useRestApi';
+import { useToast } from '@/app/composables/useToast';
+import { useI18n } from '@n8n/i18n';
+import { useRootStore } from '@/app/stores/root.store';
 
-const restApi = useRestApi();
+const rootStore = useRootStore();
 const toast = useToast();
 const i18n = useI18n();
 
-const users = ref<Array<{id: string, firstName: string, lastName: string, email: string, role: string}>>([]);
+interface UserRow {
+	id: string;
+	firstName: string;
+	lastName: string;
+	email: string;
+	role: string;
+}
+
+const users = ref<UserRow[]>([]);
 const isLoadingUsers = ref(false);
+
+const apiGet = async (path: string) => {
+	const resp = await fetch(`${rootStore.restUrl}${path}`, {
+		headers: { 'browser-id': rootStore.browserId ?? '' },
+		credentials: 'include',
+	});
+	return await resp.json();
+};
+
+const apiPost = async (path: string, body: Record<string, unknown>) => {
+	const resp = await fetch(`${rootStore.restUrl}${path}`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			'browser-id': rootStore.browserId ?? '',
+		},
+		credentials: 'include',
+		body: JSON.stringify(body),
+	});
+	return await resp.json();
+};
 
 const loadUsers = async () => {
 	isLoadingUsers.value = true;
 	try {
-		users.value = await restApi.get('/advanced-manager/users');
+		const data = await apiGet('/advanced-manager/users');
+		users.value = data.data ?? data;
 	} catch (e) {
-		toast.showError(e, 'Error loading users');
+		toast.showError(e as Error, 'Error loading users');
 	} finally {
 		isLoadingUsers.value = false;
 	}
@@ -24,27 +54,26 @@ const loadUsers = async () => {
 
 const promoteTo = async (userId: string, roleName: string) => {
 	try {
-		await restApi.post(`/advanced-manager/users/${userId}/role`, { newRoleName: roleName });
+		await apiPost(`/advanced-manager/users/${userId}/role`, { newRoleName: roleName });
 		toast.showMessage({ title: 'Success', message: `User promoted to ${roleName}` });
 		await loadUsers();
 	} catch (e) {
-		toast.showError(e, 'Error promoting user');
+		toast.showError(e as Error, 'Error promoting user');
 	}
 };
 
 const shareFree = async () => {
-	// A simple prompt to get credential and user IDs to simulate the free share functionality
 	const credId = prompt('Enter Credential ID to share:');
 	if (!credId) return;
 	const userIdsStr = prompt('Enter User IDs (comma separated) to share with:');
 	if (!userIdsStr) return;
-	
-	const userIds = userIdsStr.split(',').map(s => s.trim());
+
+	const userIds = userIdsStr.split(',').map((s) => s.trim());
 	try {
-		const res = await restApi.post(`/advanced-manager/credentials/share`, { credentialId: credId, userIds });
-		toast.showMessage({ title: 'Success', message: `Credential shared with ${res.sharedCount} users` });
+		const res = await apiPost('/advanced-manager/credentials/share', { credentialId: credId, userIds });
+		toast.showMessage({ title: 'Success', message: `Credential shared with ${(res.data ?? res).sharedCount} users` });
 	} catch (e) {
-		toast.showError(e, 'Error sharing credential');
+		toast.showError(e as Error, 'Error sharing credential');
 	}
 };
 

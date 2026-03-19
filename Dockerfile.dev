@@ -1,37 +1,6 @@
 ARG NODE_VERSION=24
 
-# === Stage 1: Build ===
-FROM node:${NODE_VERSION}-alpine AS builder
-
-RUN apk add --no-cache python3 make g++ git
-
-WORKDIR /app
-
-# Init a git repo so lefthook doesn't fail during prepare
-RUN git init && git config user.email "build@n8n" && git config user.name "build"
-
-# Enable corepack for pnpm
-RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
-
-# Copy everything needed for the build
-COPY . .
-
-# Install dependencies (with scripts so postinstall generates parsers etc.)
-RUN pnpm install --frozen-lockfile
-
-# Build all runtime packages, skip test tooling
-RUN pnpm turbo run build --filter='!@n8n/playwright-janitor' --filter='!n8n-playwright'
-
-# Create production bundle using pnpm deploy
-RUN cd packages/cli && pnpm deploy --prod --filter=n8n /app/compiled
-
-# Copy frontend build output into the compiled bundle
-RUN cp -r packages/frontend/editor-ui/dist /app/compiled/editor-ui-dist 2>/dev/null || true
-
-# Rebuild native addons for alpine
-RUN cd /app/compiled && npm rebuild sqlite3 isolated-vm
-
-# === Stage 2: Production ===
+# Simple production image - expects pre-built 'compiled/' directory
 FROM node:${NODE_VERSION}-alpine
 
 RUN apk add --no-cache \
@@ -39,7 +8,7 @@ RUN apk add --no-cache \
 
 WORKDIR /home/node
 
-COPY --from=builder /app/compiled /usr/local/lib/node_modules/n8n
+COPY compiled/ /usr/local/lib/node_modules/n8n/
 COPY docker/images/n8n/docker-entrypoint.sh /
 
 RUN ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
