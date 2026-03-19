@@ -1,0 +1,50 @@
+ARG NODE_VERSION=24
+
+# === Stage 1: Build ===
+FROM node:${NODE_VERSION}-alpine AS builder
+
+RUN apk add --no-cache python3 make g++ git
+
+WORKDIR /app
+
+# Init a git repo so lefthook doesn't fail during prepare
+RUN git init
+
+# Enable corepack for pnpm
+RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
+
+# Copy everything needed for the build
+COPY . .
+
+# Install dependencies (ignore-scripts to skip lefthook)
+RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild
+
+# Build only what's needed for n8n and bundle into compiled/
+RUN pnpm build:n8n
+
+# Rebuild native addons for alpine
+RUN cd compiled && npm rebuild sqlite3 isolated-vm
+
+# === Stage 2: Production ===
+FROM node:${NODE_VERSION}-alpine
+
+RUN apk add --no-cache \
+    git openssh openssl graphicsmagick tini tzdata ca-certificates libc6-compat
+
+WORKDIR /home/node
+
+COPY --from=builder /app/compiled /usr/local/lib/node_modules/n8n
+COPY docker/images/n8n/docker-entrypoint.sh /
+
+RUN ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
+    mkdir -p /home/node/.n8n && \
+    chown -R node:node /home/node && \
+    chmod +x /docker-entrypoint.sh && \
+    rm -rf /root/.npm /tmp/*
+
+ENV NODE_ENV=production
+ENV SHELL=/bin/sh
+EXPOSE 5678/tcp
+
+USER node
+ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
