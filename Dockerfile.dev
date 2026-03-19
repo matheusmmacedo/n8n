@@ -7,7 +7,7 @@ RUN apk add --no-cache python3 make g++ git
 
 WORKDIR /app
 
-# Init a git repo so lefthook doesn't fail during prepare
+# Init a git repo so lefthook doesn't fail
 RUN git init
 
 # Enable corepack for pnpm
@@ -19,11 +19,17 @@ COPY . .
 # Install dependencies (ignore-scripts to skip lefthook)
 RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild
 
-# Build only what's needed for n8n and bundle into compiled/
-RUN pnpm build:n8n
+# Build all runtime packages, skip test tooling
+RUN pnpm turbo run build --filter='!@n8n/playwright-janitor' --filter='!n8n-playwright'
+
+# Create production bundle using pnpm deploy
+RUN cd packages/cli && pnpm deploy --prod --filter=n8n /app/compiled
+
+# Copy frontend build output into the compiled bundle
+RUN cp -r packages/frontend/editor-ui/dist /app/compiled/editor-ui-dist 2>/dev/null || true
 
 # Rebuild native addons for alpine
-RUN cd compiled && npm rebuild sqlite3 isolated-vm
+RUN cd /app/compiled && npm rebuild sqlite3 isolated-vm
 
 # === Stage 2: Production ===
 FROM node:${NODE_VERSION}-alpine
