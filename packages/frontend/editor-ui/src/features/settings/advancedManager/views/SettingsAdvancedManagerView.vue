@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useToast } from '@/app/composables/useToast';
 import { useI18n } from '@n8n/i18n';
-import { useRootStore } from '@/app/stores/root.store';
+import { useRootStore } from '@n8n/stores/useRootStore';
 
 const rootStore = useRootStore();
 const toast = useToast();

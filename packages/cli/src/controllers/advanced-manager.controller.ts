@@ -77,7 +77,7 @@ export class AdvancedManagerController {
 			return this.sharedCredentialsRepository.create({
 				projectId: personalProject.projectId,
 				credentialsId: payload.credentialId,
-				role: 'credential:sharee'
+				role: 'credential:user'
 			});
 		}).filter(Boolean) as any[];
 
