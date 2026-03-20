@@ -1,25 +1,29 @@
-ARG NODE_VERSION=24
+# Stage 1: Build custom controller and frontend from source
+FROM node:22-slim AS builder
 
-# Simple production image - expects pre-built 'compiled/' directory
-FROM node:${NODE_VERSION}-alpine
+RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
 
-RUN apk add --no-cache \
-    git openssh openssl graphicsmagick tini tzdata ca-certificates libc6-compat
+WORKDIR /build
 
-WORKDIR /home/node
+# Copy everything (filtered by .dockerignore)
+COPY . .
 
-COPY compiled/ /usr/local/lib/node_modules/n8n/
-COPY docker/images/n8n/docker-entrypoint.sh /
+# Install dependencies and build
+RUN pnpm install --frozen-lockfile 2>&1 | tail -5
+RUN pnpm build 2>&1 | tail -20
 
-RUN ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
-    mkdir -p /home/node/.n8n && \
-    chown -R node:node /home/node && \
-    chmod +x /docker-entrypoint.sh && \
-    rm -rf /root/.npm /tmp/*
+# Stage 2: Overlay onto official n8n image
+FROM n8nio/n8n:latest
 
-ENV NODE_ENV=production
-ENV SHELL=/bin/sh
-EXPOSE 5678/tcp
+USER root
+
+# Overlay custom backend controller
+COPY --from=builder /build/packages/cli/dist/controllers/advanced-manager.controller.js /usr/local/lib/node_modules/n8n/dist/controllers/
+
+# Overlay custom frontend build (includes AdvancedManager view + router)
+COPY --from=builder /build/packages/frontend/editor-ui/dist/ /usr/local/lib/node_modules/n8n/node_modules/n8n-editor-ui/dist/
+
+RUN chown -R node:node /usr/local/lib/node_modules/n8n/dist/controllers/ && \
+    chown -R node:node /usr/local/lib/node_modules/n8n/node_modules/n8n-editor-ui/dist/
 
 USER node
-ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
