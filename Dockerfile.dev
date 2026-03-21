@@ -1,5 +1,7 @@
 # Stage 1: Build custom controller and frontend from source
-FROM node:22-slim AS builder
+FROM node:22 AS builder
+
+SHELL ["/bin/bash", "-c"]
 
 RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
 
@@ -8,9 +10,19 @@ WORKDIR /build
 # Copy everything (filtered by .dockerignore)
 COPY . .
 
-# Install dependencies and build
-RUN pnpm install --frozen-lockfile 2>&1 | tail -5
-RUN pnpm build 2>&1 | tail -20
+# Create stub for janitor bin (dist/ excluded by .dockerignore, pnpm needs it for bin link)
+RUN mkdir -p packages/testing/janitor/dist && \
+    echo "#!/usr/bin/env node" > packages/testing/janitor/dist/cli.js
+
+# Install dependencies without lifecycle scripts, then rebuild native addons
+RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN pnpm rebuild || true
+
+# Generate lezer parser files (gitignored in codemirror-lang-html, excluded by railway upload)
+RUN cd packages/@n8n/codemirror-lang-html && pnpm run grammar:build
+
+# Build only the packages we need: cli (controller) and editor-ui (frontend)
+RUN npx turbo run build --filter=n8n --filter=n8n-editor-ui
 
 # Stage 2: Overlay onto official n8n image
 FROM n8nio/n8n:latest
