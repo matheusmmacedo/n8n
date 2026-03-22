@@ -25,7 +25,8 @@ RUN cd packages/@n8n/codemirror-lang-html && pnpm run grammar:build
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Build only the packages we need: cli (controller) and editor-ui (frontend)
-RUN npx turbo run build --filter=n8n --filter=n8n-editor-ui --concurrency=1
+# Exclude nodes-langchain — its build requires native sqlite3 bindings not needed for overlay
+RUN npx turbo run build --filter=n8n --filter=n8n-editor-ui --filter='!@n8n/n8n-nodes-langchain' --concurrency=1
 
 # Stage 2: Overlay onto official n8n image
 FROM n8nio/n8n:latest
