@@ -19,7 +19,7 @@ RUN mkdir -p packages/testing/janitor/dist && \
 
 # Install dependencies without lifecycle scripts, then rebuild native addons
 RUN pnpm install --frozen-lockfile --ignore-scripts
-RUN pnpm rebuild
+RUN pnpm rebuild || true
 RUN cd node_modules/.pnpm/sqlite3@5.1.7/node_modules/sqlite3 && npx node-gyp rebuild || true
 
 # Generate lezer parser files (gitignored in codemirror-lang-html, excluded by railway upload)
